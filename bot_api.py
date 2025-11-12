@@ -14,7 +14,7 @@ creds_json = os.getenv("CREDENTIALS_JSON")
 if not creds_json:
     raise ValueError("CREDENTIALS_JSON не встановлено!")
 creds_dict = json.loads(creds_json)
-client = gspread.service_account_from_dict(creds_auth)
+client = gspread.service_account_from_dict(creds_dict)  # ← ВИПРАВЛЕНО
 
 sh = client.open_by_key(SHEET_ID)
 cats_sheet = sh.worksheet("Categories")
@@ -164,7 +164,7 @@ def contributions():
     rows = [r for r in trans_sheet.get_all_values()[1:] if len(r)>6 and r[6] == mk]
     
     g_id = 350174070
-    d_id = 387290608
+    d_id = 387}_{(290608
     g_name = USERS.get(g_id, "Hlib")
     d_name = USERS.get(d_id, "Daria")
     g_spent = sum(safe_int(r[3]) for r in rows if r[1] == g_name)
