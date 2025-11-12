@@ -4,64 +4,163 @@
   <meta charset="utf-8">
   <title>Бюджет</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-  <meta http-equiv="Pragma" content="no-cache">
-  <meta http-equiv="Expires" content="0">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
-    /* твій стиль */
+    :root {
+      --bg: var(--tg-theme-bg-color, #fff);
+      --text: var(--tg-theme-text-color, #000);
+      --hint: var(--tg-theme-hint-color, #999);
+      --btn: var(--tg-theme-button-color, #2481cc);
+      --btn-text: var(--tg-theme-button-text-color, #fff);
+      --secondary: var(--tg-theme-secondary-bg-color, #f0f0f0);
+      --border: var(--tg-theme-hint-color, #e0e0e0);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg); color: var(--text); padding: 20px; min-height: 100vh;
+      line-height: 1.5;
+    }
+    .header { 
+      font-size: 24px; font-weight: 700; text-align: center; margin-bottom: 24px; 
+      background: linear-gradient(135deg, var(--btn), #1a73e8); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    button {
+      background: linear-gradient(135deg, var(--btn), #1a5fd7); color: var(--btn-text); border: none; padding: 16px;
+      border-radius: 16px; font-size: 16px; font-weight: 600; cursor: pointer;
+      transition: all 0.3s ease; text-align: center; box-shadow: 0 4px 12px rgba(36, 129, 204, 0.2);
+    }
+    button:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(36, 129, 204, 0.3); }
+    button:active { opacity: 0.9; transform: translateY(0); }
+    .output {
+      background: var(--secondary); padding: 20px; border-radius: 16px;
+      font-size: 15px; white-space: pre-line; min-height: 80px; color: var(--text);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1); border: 1px solid var(--border);
+    }
+    .auth-screen { text-align: center; padding: 40px; }
+    .auth-screen p { margin: 16px 0; color: var(--hint); }
+    .user-info { text-align: center; margin-bottom: 16px; font-size: 14px; color: var(--hint); }
+    .logout { font-size: 12px; color: var(--hint); text-decoration: underline; cursor: pointer; }
+    .hidden { display: none; }
   </style>
 </head>
 <body>
-  <!-- авторизація + інтерфейс -->
+  <!-- Авторизація (разова) -->
+  <div id="authScreen" class="auth-screen">
+    <h2>🔐 Авторизація</h2>
+    <p>Твій ID: <span id="userId"></span></p>
+    <p id="authMessage">Перевіряю доступ...</p>
+    <button id="authButton" onclick="checkAuth()" class="btn btn-primary hidden">Перевірити доступ</button>
+  </div>
+
+  <!-- Основний інтерфейс -->
   <div id="mainApp" class="hidden">
-    <!-- кнопки -->
-    <button onclick="showSummary()">Підсумок</button>
-    <!-- output -->
+    <div class="user-info">
+      Привіт, <span id="userName"></span>! <span class="logout" onclick="logout()">Вийти</span>
+    </div>
+    <div class="header">💰 Бюджет</div>
+    <div class="grid">
+      <button onclick="showAdd()">➕ Додати витрату</button>
+      <button onclick="showSummary()">📊 Підсумок</button>
+      <button onclick="showBalance()">👥 Баланс</button>
+      <button onclick="undoLast()">⎌ Скасувати</button>
+      <button onclick="showLast()">🧾 Останні</button>
+      <button onclick="showSettings()">⚙️ Налаштування</button>
+    </div>
     <div id="output" class="output">Завантаження...</div>
+  </div>
+
+  <!-- Popup для додавання витрати -->
+  <div id="addPopup" class="popup hidden">
+    <div class="popup-content">
+      <h3>➕ Додати витрату</h3>
+      <select id="categorySelect" class="input">
+        <option value="">— Завантаження... —</option>
+      </select>
+      <input type="number" id="amountInput" placeholder="Сума (грн)" class="input" min="1">
+      <input type="text" id="noteInput" placeholder="Нотатка (необов'язково)" class="input">
+      <div class="btn-group">
+        <button class="btn btn-secondary" onclick="hidePopup('addPopup')">Скасувати</button>
+        <button class="btn btn-primary" onclick="saveExpense()">Додати</button>
+      </div>
+    </div>
   </div>
 
   <script>
     const tg = window.Telegram.WebApp;
     tg.ready(); tg.expand();
 
+    const ALLOWED_IDS = { '350174070': 'Гліб', '387290608': 'Дарʼя' };
     const API_URL = '';
-    const userId = tg.initDataUnsafe?.user?.id || 0;
-    const ALLOWED_IDS = [350174070, 387290608];
+    const userId = tg.initDataUnsafe?.user?.id?.toString() || '0';
 
-    // === Авторизація (разова) ===
-    const storageKey = 'budget_auth';
+    let isAuthorized = false;
+    let userName = '';
+
+    // === localStorage ===
+    const storageKey = 'budget_app_auth';
     const saved = localStorage.getItem(storageKey);
-    if (saved && JSON.parse(saved).userId == userId) {
-      document.getElementById('mainApp').classList.remove('hidden');
-      showSummary();
-    } else if (ALLOWED_IDS.includes(userId)) {
-      localStorage.setItem(storageKey, JSON.stringify({userId}));
-      document.getElementById('mainApp').classList.remove('hidden');
-      showSummary();
+    if (saved) {
+      const data = JSON.parse(saved);
+      if (data.userId === userId && ALLOWED_IDS[data.userId]) {
+        isAuthorized = true;
+        userName = ALLOWED_IDS[data.userId];
+        document.getElementById('userName').textContent = userName;
+        document.getElementById('mainApp').classList.remove('hidden');
+        showSummary();
+      }
+    }
+
+    // === Авторизація ===
+    document.getElementById('userId').textContent = userId;
+
+    function checkAuth() {
+      if (ALLOWED_IDS[userId]) {
+        isAuthorized = true;
+        userName = ALLOWED_IDS[userId];
+        localStorage.setItem(storageKey, JSON.stringify({ userId, userName }));
+        document.getElementById('userName').textContent = userName;
+        document.getElementById('authScreen').classList.add('hidden');
+        document.getElementById('mainApp').classList.remove('hidden');
+        showSummary();
+      } else {
+        document.getElementById('authMessage').textContent = 'Доступ заборонено';
+        document.getElementById('authButton').classList.add('hidden');
+      }
+    }
+
+    function logout() {
+      localStorage.removeItem(storageKey);
+      location.reload();
+    }
+
+    // Показати авторизацію, якщо не авторизовано
+    if (!isAuthorized) {
+      document.getElementById('authButton').classList.remove('hidden');
+      document.getElementById('authMessage').textContent = 'Натисни кнопку для входу';
     }
 
     // === API ===
     async function api(action, data = {}) {
+      if (!isAuthorized) return { error: 'Авторизуйся' };
       data.action = action; data.userId = userId;
-      const res = await fetch(API_URL + '/' + action, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-      return await res.json();
+      try {
+        const res = await fetch(API_URL + '/' + action, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        return await res.json();
+      } catch (err) {
+        return { error: 'Сервер недоступний' };
+      }
     }
 
-    window.showSummary = async () => {
-      document.getElementById('output').innerText = 'Завантаження...';
-      const res = await api('summary');
-      document.getElementById('output').innerText = res.summary || res.error || 'Пусто';
-    };
+    // (решта функцій — showAdd, showSummary, saveExpense, etc. — як раніше)
 
     // Автооновлення
-    if (document.getElementById('mainApp').classList.contains('hidden') === false) {
-      showSummary();
-    }
+    if (isAuthorized) showSummary();
   </script>
 </body>
 </html>

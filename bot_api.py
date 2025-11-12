@@ -53,6 +53,38 @@ def get_categories():
         return jsonify({'error': 'Доступ заборонено'})
     return jsonify({'categories': list(CATS.keys())})
 
+@app.route('/addExpense', methods=['POST'])
+def add_expense():
+    data = request.json
+    user_id = data.get('userId', 0)
+    if user_id not in ALLOWED_IDS:
+        return jsonify({'error': 'Доступ заборонено'})
+    cat = data.get('cat')
+    amount = data.get('amount')
+    note = data.get('note', '—')
+    person = USERS.get(user_id, 'Невідомий')
+    
+    if cat not in CATS:
+        return jsonify({'error': 'Категорія не існує'})
+
+    mk = datetime.now().strftime("%Y%m")
+    row = [datetime.now().strftime("%Y-%m-%d %H:%M"), person, cat, amount, note, 0, mk]
+    trans_sheet.append_row(row)
+    
+    spent = sum(safe_int(r[3]) for r in trans_sheet.get_all_values()[1:] if len(r)>6 and r[6] == mk and r[2] == cat)
+    limit = CATS[cat]
+    balance = limit - spent
+    perc = spent / limit * 100 if limit else 0
+    warn = "80%" if 80 <= perc < 100 else "100%" if perc >= 100 else ""
+    
+    p_spent = sum(safe_int(r[3]) for r in trans_sheet.get_all_values()[1:] if len(r)>6 and r[6] == mk and r[1] == person)
+    p_limit = PERSONAL.get(person, 0)
+    p_balance = p_limit - p_spent
+    p_warn = "наближаєтесь" if p_limit and 80 <= p_spent/p_limit*100 < 100 else "перевищення!" if p_limit and p_spent/p_limit*100 >= 100 else ""
+    
+    message = f"{amount} грн — {cat}\nБаланс: {balance} ({int(perc)}%) {warn}\n{person}: {p_balance}/{p_limit} {p_warn}"
+    return jsonify({'message': message})
+
 @app.route('/summary', methods=['POST'])
 def summary():
     user_id = request.json.get('userId', 0)
@@ -62,15 +94,15 @@ def summary():
     rows = [r for r in trans_sheet.get_all_values()[1:] if len(r)>6 and r[6] == mk]
     spent = {c: sum(safe_int(r[3]) for r in rows if r[2] == c) for c in CATS}
     text = "\n".join(
-        f"{c}: {lim - spent.get(c,0)} / {lim} ({int(spent.get(c,0)/lim*100)}%)"
-        for c, lim in CATS.items() if lim > 0
+        f"{c}: {limit - spent.get(c,0)} / {limit} ({int(spent.get(c,0)/limit*100)}%) {'80%' if 80<=spent.get(c,0)/limit*100<100 else '100%' if spent.get(c,0)/limit*100>=100 else ''}"
+        for c, limit in CATS.items() if limit > 0
     )
-    total = sum(spent.values())
+    total_spent = sum(spent.values())
     g_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Гліб")
     d_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Дарʼя")
     g_balance = 45000 - g_spent
     d_balance = 33000 - d_spent
-    summary_text = f"{text}\n\nРазом: {total} грн\nГліб: {g_balance}/45000\nДарʼя: {d_balance}/33000"
+    summary_text = f"{text}\n\nРазом витрачено: {total_spent} грн\nГліб: {g_balance}/45000\nДарʼя: {d_balance}/33000"
     return jsonify({'summary': summary_text})
 
 @app.route('/balance', methods=['POST'])
@@ -84,7 +116,7 @@ def balance():
     d_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Дарʼя")
     g_balance = 45000 - g_spent
     d_balance = 33000 - d_spent
-    return jsonify({'balance': f"Гліб: {g_balance}/45000\nДарʼя: {d_balance}/33000"})
+    return jsonify({'balance': f"Гліб: {g_balance}/45000 (залишок)\nДарʼя: {d_balance}/33000 (залишок)"})
 
 @app.route('/undo', methods=['POST'])
 def undo():
@@ -114,36 +146,6 @@ def last5():
         for r in rows if len(r) > 4
     ) or "Пусто"
     return jsonify({'last': text})
-
-@app.route('/addExpense', methods=['POST'])
-def add_expense():
-    data = request.json
-    user_id = data.get('userId', 0)
-    if user_id not in ALLOWED_IDS:
-        return jsonify({'error': 'Доступ заборонено'})
-    cat = data.get('cat')
-    amount = data.get('amount')
-    note = data.get('note', '—')
-    person = USERS.get(user_id, 'Невідомий')
-    
-    if cat not in CATS:
-        return jsonify({'error': 'Категорія не існує'})
-
-    mk = datetime.now().strftime("%Y%m")
-    row = [datetime.now().strftime("%Y-%m-%d %H:%M"), person, cat, amount, note, 0, mk]
-    trans_sheet.append_row(row)
-    
-    spent = sum(safe_int(r[3]) for r in trans_sheet.get_all_values()[1:] if len(r)>6 and r[6] == mk and r[2] == cat)
-    limit = CATS[cat]
-    perc = spent / limit * 100 if limit else 0
-    warn = "80%" if 80 <= perc < 100 else "100%" if perc >= 100 else ""
-    
-    p_spent = sum(safe_int(r[3]) for r in trans_sheet.get_all_values()[1:] if len(r)>6 and r[6] == mk and r[1] == person)
-    p_limit = PERSONAL.get(person, 0)
-    p_warn = "наближаєтесь" if p_limit and 80 <= p_spent/p_limit*100 < 100 else "перевищення!" if p_limit and p_spent/p_limit*100 >= 100 else ""
-    
-    message = f"{amount} грн — {cat}\nЗалишок: {limit - spent} ({int(perc)}%) {warn}\n{person}: {p_limit - p_spent}/{p_limit} {p_warn}"
-    return jsonify({'message': message})
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
