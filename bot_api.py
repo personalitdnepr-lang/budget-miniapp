@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify, send_from_directory
 import gspread
-from datetime import datetime
+import json
 import os
 from dotenv import load_dotenv
 
@@ -9,13 +9,20 @@ SHEET_ID = os.getenv("SHEET_ID")
 
 app = Flask(__name__, static_folder='.')
 
-# Google Sheets
-client = gspread.service_account(filename="credentials.json")
+# === Google Sheets: з змінної CREDENTIALS_JSON ===
+creds_json = os.getenv("CREDENTIALS_JSON")
+if not creds_json:
+    raise ValueError("CREDENTIALS_JSON не встановлено! Додай у змінні середовища Railway.")
+
+creds_dict = json.loads(creds_json)
+client = gspread.service_account_from_dict(creds_dict)
+
 sh = client.open_by_key(SHEET_ID)
 cats_sheet = sh.worksheet("Categories")
 trans_sheet = sh.worksheet("Transactions")
 pers_sheet = sh.worksheet("Persons")
 
+# === Завантаження даних ===
 def load_data():
     CATS = {row[0]: int(row[1]) for row in cats_sheet.get_all_values()[1:] if len(row) >= 2 and row[0]}
     PERSONAL = {row[1]: int(row[2]) for row in pers_sheet.get_all_values()[1:] if len(row) > 2 and row[1]}
@@ -24,17 +31,9 @@ def load_data():
 
 CATS, PERSONAL, USERS = load_data()
 
-def month_key():
-    return datetime.now().strftime("%Y%m")
+ALLOWED_IDS = [350174070, 387290608]
 
-def safe_int(s, default=0):
-    try:
-        return int(s)
-    except (ValueError, TypeError):
-        return default
-
-# === HTML + API на одному сервері ===
-
+# === HTML ===
 @app.route('/', methods=['GET'])
 def index():
     return send_from_directory('.', 'index.html')
@@ -44,18 +43,22 @@ def static_files(path):
     return send_from_directory('.', path)
 
 # === API ===
-
 @app.route('/getCategories', methods=['POST'])
 def get_categories():
+    user_id = request.json.get('userId', 0)
+    if user_id not in ALLOWED_IDS:
+        return jsonify({'error': 'Доступ заборонено'})
     return jsonify({'categories': list(CATS.keys())})
 
 @app.route('/addExpense', methods=['POST'])
 def add_expense():
     data = request.json
+    user_id = data.get('userId', 0)
+    if user_id not in ALLOWED_IDS:
+        return jsonify({'error': 'Доступ заборонено'})
     cat = data.get('cat')
     amount = data.get('amount')
     note = data.get('note', '—')
-    user_id = data.get('userId', 0)
     person = USERS.get(user_id, 'Невідомий')
     
     if cat not in CATS:
@@ -77,8 +80,20 @@ def add_expense():
     message = f"{amount} грн — {cat}\nЗалишок: {limit - spent} ({int(perc)}%) {warn}\n{person}: {p_spent}/{p_limit} {p_warn}"
     return jsonify({'message': message})
 
+def month_key():
+    return datetime.now().strftime("%Y%m")
+
+def safe_int(s, default=0):
+    try:
+        return int(s)
+    except (ValueError, TypeError):
+        return default
+
 @app.route('/summary', methods=['POST'])
 def summary():
+    user_id = request.json.get('userId', 0)
+    if user_id not in ALLOWED_IDS:
+        return jsonify({'error': 'Доступ заборонено'})
     mk = month_key()
     rows = [r for r in trans_sheet.get_all_values()[1:] if len(r)>6 and r[6] == mk]
     spent = {c: sum(safe_int(r[3]) for r in rows if r[2] == c) for c in CATS}
@@ -94,6 +109,9 @@ def summary():
 
 @app.route('/balance', methods=['POST'])
 def balance():
+    user_id = request.json.get('userId', 0)
+    if user_id not in ALLOWED_IDS:
+        return jsonify({'error': 'Доступ заборонено'})
     mk = month_key()
     rows = [r for r in trans_sheet.get_all_values()[1:] if len(r)>6 and r[6] == mk]
     g = sum(safe_int(r[3]) for r in rows if r[1] == "Гліб")
@@ -102,8 +120,9 @@ def balance():
 
 @app.route('/undo', methods=['POST'])
 def undo():
-    data = request.json
-    user_id = data.get('userId', 0)
+    user_id = request.json.get('userId', 0)
+    if user_id not in ALLOWED_IDS:
+        return jsonify({'error': 'Доступ заборонено'})
     person = USERS.get(user_id, '')
     if not person:
         return jsonify({'message': 'Ти не в базі'})
@@ -118,6 +137,9 @@ def undo():
 
 @app.route('/last5', methods=['POST'])
 def last5():
+    user_id = request.json.get('userId', 0)
+    if user_id not in ALLOWED_IDS:
+        return jsonify({'error': 'Доступ заборонено'})
     rows = trans_sheet.get_all_values()[1:][-5:][::-1]
     text = "\n".join(
         f"{r[0].split()[0]} – {r[2]} – {r[3]} – {r[1]} – \"{r[4]}\"" 
@@ -126,5 +148,5 @@ def last5():
     return jsonify({'last': text})
 
 if __name__ == '__main__':
-    print("Сервер запущено: http://localhost:8000")
-    app.run(host='0.0.0.0', port=8000, debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
