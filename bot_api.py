@@ -22,6 +22,13 @@ trans_sheet = sh.worksheet("Transactions")
 pers_sheet = sh.worksheet("Persons")
 cont_sheet = sh.worksheet("Contributions")
 
+# safe_int — ВИЩЕ load_data()!
+def safe_int(s, default=0):
+    try:
+        return int(s) if s.strip() else default
+    except (ValueError, TypeError):
+        return default
+
 def load_data():
     CATS = {row[0]: int(row[1]) for row in cats_sheet.get_all_values()[1:] if len(row) >= 2 and row[0]}
     PERSONAL = {row[1]: int(row[2]) for row in pers_sheet.get_all_values()[1:] if len(row) > 2 and row[1]}
@@ -34,26 +41,20 @@ def load_data():
             name = row[0]
             CONTRIBUTIONS[name] = {
                 'total': safe_int(row[1]),
-                'Apartment': safe_int(row[2]),
-                'Food': safe_int(row[3]),
-                'Cats': safe_int(row[4]),
-                'Chemistry': safe_int(row[5]),
-                'BeautyHealth': safe_int(row[6]),
-                'Entertainment': safe_int(row[7]),
-                'Taxi': safe_int(row[8]),
-                'Other': safe_int(row[9])
+                'Квартира': safe_int(row[2]),
+                'Еда': safe_int(row[3]),
+                'Коты': safe_int(row[4]),
+                'Химия': safe_int(row[5]),
+                'Красота и здоровье': safe_int(row[6]),
+                'Развлечения': safe_int(row[7]),
+                'Такси': safe_int(row[8]),
+                'Другое': safe_int(row[9])
             }
     return CATS, PERSONAL, USERS, CONTRIBUTIONS
 
 CATS, PERSONAL, USERS, CONTRIBUTIONS = load_data()
 
 ALLOWED_IDS = [350174070, 387290608]
-
-def safe_int(s, default=0):
-    try:
-        return int(s) if s.strip() else default
-    except (ValueError, TypeError):
-        return default
 
 @app.route('/', methods=['GET'])
 def index():
