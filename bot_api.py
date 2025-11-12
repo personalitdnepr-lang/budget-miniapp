@@ -123,13 +123,12 @@ def summary():
     )
     total_spent = sum(spent.values())
     
-    # Баланс по ID → ім'я → ліміт
     g_id = 350174070
     d_id = 387290608
-    g_name = USERS.get(g_id, "Гліб")
-    d_name = USERS.get(d_id, "Дарʼя")
-    g_spent = sum(safe_int(r[3]) for r in rows if safe_int(r[0].split()[0]) == g_id)
-    d_spent = sum(safe_int(r[3]) for r in rows if safe_int(r[0].split()[0]) == d_id)
+    g_name = USERS.get(g_id, "Hlib")
+    d_name = USERS.get(d_id, "Daria")
+    g_spent = sum(safe_int(r[3]) for r in rows if r[1] == g_name)
+    d_spent = sum(safe_int(r[3]) for r in rows if r[1] == d_name)
     g_limit = PERSONAL.get(g_name, 0)
     d_limit = PERSONAL.get(d_name, 0)
     g_balance = g_limit - g_spent
@@ -161,23 +160,28 @@ def contributions():
     
     mk = datetime.now().strftime("%Y%m")
     rows = [r for r in trans_sheet.get_all_values()[1:] if len(r)>6 and r[6] == mk]
-    g_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Hlib")
-    d_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Daria")
     
-    g_limit = PERSONAL.get("Hlib", 0)
-    d_limit = PERSONAL.get("Daria", 0)
+    g_id = 350174070
+    d_id = 387290608
+    g_name = USERS.get(g_id, "Hlib")
+    d_name = USERS.get(d_id, "Daria")
+    g_spent = sum(safe_int(r[3]) for r in rows if r[1] == g_name)
+    d_spent = sum(safe_int(r[3]) for r in rows if r[1] == d_name)
+    
+    g_limit = PERSONAL.get(g_name, 0)
+    d_limit = PERSONAL.get(d_name, 0)
     g_balance = g_limit - g_spent
     d_balance = d_limit - d_spent
     
-    g_contrib = contrib_data.get("Hlib", {})
-    d_contrib = contrib_data.get("Daria", {})
+    g_contrib = contrib_data.get(g_name, {})
+    d_contrib = contrib_data.get(d_name, {})
     
-    text = f"Внесок у бюджет:\nГліб: {g_contrib.get('total', 0)} грн (баланс {g_balance} грн)\n"
+    text = f"Внесок у бюджет:\n{g_name}: {g_contrib.get('total', 0)} грн (баланс {g_balance} грн)\n"
     for cat, amount in g_contrib.items():
         if cat != 'total' and amount > 0:
             text += f" - {cat}: {amount} грн\n"
     
-    text += f"Дарʼя: {d_contrib.get('total', 0)} грн (баланс {d_balance} грн)\n"
+    text += f"{d_name}: {d_contrib.get('total', 0)} грн (баланс {d_balance} грн)\n"
     for cat, amount in d_contrib.items():
         if cat != 'total' and amount > 0:
             text += f" - {cat}: {amount} грн\n"
@@ -190,13 +194,19 @@ def balance():
         return jsonify({'error': 'Доступ заборонено'}), 403
     mk = datetime.now().strftime("%Y%m")
     rows = [r for r in trans_sheet.get_all_values()[1:] if len(r)>6 and r[6] == mk]
-    g_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Hlib")
-    d_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Daria")
-    g_limit = PERSONAL.get("Hlib", 0)
-    d_limit = PERSONAL.get("Daria", 0)
+    
+    g_id = 350174070
+    d_id = 387290608
+    g_name = USERS.get(g_id, "Hlib")
+    d_name = USERS.get(d_id, "Daria")
+    g_spent = sum(safe_int(r[3]) for r in rows if r[1] == g_name)
+    d_spent = sum(safe_int(r[3]) for r in rows if r[1] == d_name)
+    
+    g_limit = PERSONAL.get(g_name, 0)
+    d_limit = PERSONAL.get(d_name, 0)
     g_balance = g_limit - g_spent
     d_balance = d_limit - d_spent
-    return jsonify({'balance': f"Гліб: {g_balance}/{g_limit} (залишок)\nДарʼя: {d_balance}/{d_limit} (залишок)"})
+    return jsonify({'balance': f"{g_name}: {g_balance}/{g_limit} (залишок)\n{d_name}: {d_balance}/{d_limit} (залишок)"})
 
 @app.route('/undo', methods=['POST'])
 def undo():
