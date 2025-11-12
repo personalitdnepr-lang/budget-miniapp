@@ -62,7 +62,6 @@ def index():
 def static_files(path):
     return send_from_directory('.', path)
 
-# УСІ маршрути — конвертуємо userId в int
 def check_user():
     user_id = request.json.get('userId', 0)
     try:
@@ -75,8 +74,7 @@ def check_user():
 
 @app.route('/getCategories', methods=['POST'])
 def get_categories():
-    user_id = check_user()
-    if not user_id:
+    if not check_user():
         return jsonify({'error': 'Доступ заборонено'}), 403
     return jsonify({'categories': list(CATS.keys())})
 
@@ -114,8 +112,7 @@ def add_expense():
 
 @app.route('/summary', methods=['POST'])
 def summary():
-    user_id = check_user()
-    if not user_id:
+    if not check_user():
         return jsonify({'error': 'Доступ заборонено'}), 403
     mk = datetime.now().strftime("%Y%m")
     rows = [r for r in trans_sheet.get_all_values()[1:] if len(r)>6 and r[6] == mk]
@@ -127,15 +124,16 @@ def summary():
     total_spent = sum(spent.values())
     g_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Гліб")
     d_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Дарʼя")
-    g_balance = PERSONAL.get("Гліб", 0) - g_spent
-    d_balance = PERSONAL.get("Дарʼя", 0) - d_spent
-    summary_text = f"{text}\n\nРазом витрачено: {total_spent} грн\nГліб: {g_balance} грн\nДарʼя: {d_balance} грн"
+    g_limit = PERSONAL.get("Гліб", 0)
+    d_limit = PERSONAL.get("Дарʼя", 0)
+    g_balance = g_limit - g_spent
+    d_balance = d_limit - d_spent
+    summary_text = f"{text}\n\nРазом витрачено: {total_spent} грн\nГліб: {g_balance}/{g_limit}\nДарʼя: {d_balance}/{d_limit}"
     return jsonify({'summary': summary_text})
 
 @app.route('/contributions', methods=['POST'])
 def contributions():
-    user_id = check_user()
-    if not user_id:
+    if not check_user():
         return jsonify({'error': 'Доступ заборонено'}), 403
     
     contrib_data = {}
@@ -161,10 +159,12 @@ def contributions():
     
     g_contrib = contrib_data.get("Hlib", {})
     d_contrib = contrib_data.get("Daria", {})
-    g_balance = g_contrib.get('total', 0) - g_spent
-    d_balance = d_contrib.get('total', 0) - d_spent
+    g_limit = PERSONAL.get("Гліб", 0)
+    d_limit = PERSONAL.get("Дарʼя", 0)
+    g_balance = g_limit - g_spent
+    d_balance = d_limit - d_spent
     
-    text = f"Внесок у бюджет: \nГліб: {g_contrib.get('total', 0)} грн (баланс {g_balance} грн)\n"
+    text = f"Внесок у бюджет:\nГліб: {g_contrib.get('total', 0)} грн (баланс {g_balance} грн)\n"
     for cat, amount in g_contrib.items():
         if cat != 'total' and amount > 0:
             text += f" - {cat}: {amount} грн\n"
@@ -178,8 +178,7 @@ def contributions():
 
 @app.route('/balance', methods=['POST'])
 def balance():
-    user_id = check_user()
-    if not user_id:
+    if not check_user():
         return jsonify({'error': 'Доступ заборонено'}), 403
     mk = datetime.now().strftime("%Y%m")
     rows = [r for r in trans_sheet.get_all_values()[1:] if len(r)>6 and r[6] == mk]
@@ -210,8 +209,7 @@ def undo():
 
 @app.route('/last5', methods=['POST'])
 def last5():
-    user_id = check_user()
-    if not user_id:
+    if not check_user():
         return jsonify({'error': 'Доступ заборонено'}), 403
     rows = trans_sheet.get_all_values()[1:][-5:][::-1]
     text = "\n".join(
