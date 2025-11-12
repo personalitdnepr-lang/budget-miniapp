@@ -14,7 +14,7 @@ creds_json = os.getenv("CREDENTIALS_JSON")
 if not creds_json:
     raise ValueError("CREDENTIALS_JSON не встановлено!")
 creds_dict = json.loads(creds_json)
-client = gspread.service_account_from_dict(creds_dict)
+client = gspread.service_account_from_dict(creds_auth)
 
 sh = client.open_by_key(SHEET_ID)
 cats_sheet = sh.worksheet("Categories")
@@ -237,6 +237,55 @@ def last5():
         for r in rows if len(r) > 4
     ) or "Пусто"
     return jsonify({'last': text})
+
+# НОВІ МАРШРУТИ ДЛЯ НАЛАШТУВАНЬ
+@app.route('/getSettings', methods=['POST'])
+def get_settings():
+    if not check_user():
+        return jsonify({'error': 'Доступ заборонено'}), 403
+    
+    cats = [{"name": c, "limit": l} for c, l in CATS.items()]
+    
+    g_name = USERS.get(350174070, "Hlib")
+    d_name = USERS.get(387290608, "Daria")
+    limits = {
+        "Гліб": PERSONAL.get(g_name, 0),
+        "Дарʼя": PERSONAL.get(d_name, 0)
+    }
+    
+    return jsonify({
+        'categories': cats,
+        'limits': limits
+    })
+
+@app.route('/updateLimit', methods=['POST'])
+def update_limit():
+    user_id = check_user()
+    if not user_id:
+        return jsonify({'error': 'Доступ заборонено'}), 403
+    
+    data = request.json
+    type_ = data.get('type')  # 'category' or 'person'
+    name = data.get('name')
+    value = safe_int(data.get('value', 0))
+    
+    if type_ == 'category':
+        if name not in CATS:
+            return jsonify({'error': 'Категорія не існує'})
+        row = cats_sheet.find(name).row
+        cats_sheet.update_cell(row, 2, value)
+        CATS[name] = value
+    elif type_ == 'person':
+        person_name = USERS.get(user_id)
+        if name not in ["Гліб", "Дарʼя"]:
+            return jsonify({'error': 'Невірне імʼя'})
+        row = pers_sheet.find(name).row
+        pers_sheet.update_cell(row, 3, value)
+        PERSONAL[name] = value
+    else:
+        return jsonify({'error': 'Невірний тип'})
+    
+    return jsonify({'success': True})
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
