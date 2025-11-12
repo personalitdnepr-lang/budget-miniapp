@@ -38,17 +38,24 @@
       font-size: 15px; white-space: pre-line; min-height: 80px; color: var(--text);
       box-shadow: 0 2px 8px rgba(0,0,0,0.1); border: 1px solid var(--border);
     }
+    .popup { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 100; backdrop-filter: blur(4px); }
+    .popup-content { background: var(--bg); padding: 24px; border-radius: 20px; width: 90%; max-width: 400px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
+    .input { width: 100%; padding: 14px; margin: 12px 0; border: 1px solid var(--border); border-radius: 12px; font-size: 16px; }
+    .input:focus { border-color: var(--btn); outline: none; }
+    .btn-group { display: flex; gap: 12px; margin-top: 20px; }
+    .btn { flex: 1; padding: 14px; border-radius: 12px; font-weight: 600; cursor: pointer; }
+    .btn-primary { background: linear-gradient(135deg, var(--btn), #1a5fd7); color: var(--btn-text); }
+    .btn-secondary { background: var(--secondary); color: var(--text); border: 1px solid var(--border); }
+    .hidden { display: none; }
     .auth-screen { text-align: center; padding: 40px; }
-    .auth-screen p { margin: 16px 0; color: var(--hint); }
     .user-info { text-align: center; margin-bottom: 16px; font-size: 14px; color: var(--hint); }
     .logout { font-size: 12px; color: var(--hint); text-decoration: underline; cursor: pointer; }
-    .hidden { display: none; }
   </style>
 </head>
 <body>
   <!-- Авторизація -->
   <div id="authScreen" class="auth-screen">
-    <h2>🔐 Авторизація</h2>
+    <h2>Авторизація</h2>
     <p>Твій ID: <span id="userId"></span></p>
     <p id="authMessage">Перевіряю доступ...</p>
   </div>
@@ -58,14 +65,14 @@
     <div class="user-info">
       Привіт, <span id="userName"></span>! <span class="logout" onclick="logout()">Вийти</span>
     </div>
-    <div class="header">💰 Бюджет</div>
+    <div class="header">Бюджет</div>
     <div class="grid">
-      <button onclick="showAdd()">➕ Додати витрату</button>
-      <button onclick="showSummary()">📊 Підсумок</button>
-      <button onclick="showBalance()">👥 Баланс</button>
-      <button onclick="undoLast()">⎌ Скасувати</button>
-      <button onclick="showLast()">🧾 Останні</button>
-      <button onclick="showSettings()">⚙️ Налаштування</button>
+      <button onclick="showAdd()">Додати витрату</button>
+      <button onclick="showSummary()">Підсумок</button>
+      <button onclick="showBalance()">Баланс</button>
+      <button onclick="undoLast()">Скасувати</button>
+      <button onclick="showLast()">Останні</button>
+      <button onclick="showSettings()">Налаштування</button>
     </div>
     <div id="output" class="output">Завантаження...</div>
   </div>
@@ -73,7 +80,7 @@
   <!-- Popup для додавання витрати -->
   <div id="addPopup" class="popup hidden">
     <div class="popup-content">
-      <h3>➕ Додати витрату</h3>
+      <h3>Додати витрату</h3>
       <select id="categorySelect" class="input">
         <option value="">— Завантаження... —</option>
       </select>
@@ -135,7 +142,7 @@
     }
 
     // === АВТОМАТИЧНА ПЕРЕВІРКА ===
-    setTimeout(checkAuth, 500);  // ← АВТОМАТИЧНО через 0.5 сек
+    setTimeout(checkAuth, 500);
 
     // === API ===
     async function api(action, data = {}) {
@@ -153,9 +160,73 @@
       }
     }
 
-    // (інші функції — showAdd, showSummary, etc.)
+    // === ФУНКЦІЇ ===
+    async function loadCategories() {
+      const res = await api('getCategories');
+      const select = document.getElementById('categorySelect');
+      select.innerHTML = '<option value="">— Оберіть —</option>';
+      if (res.categories && res.categories.length > 0) {
+        res.categories.forEach(cat => {
+          const opt = document.createElement('option');
+          opt.value = cat; opt.textContent = cat;
+          select.appendChild(opt);
+        });
+      } else {
+        select.innerHTML += '<option value="">Немає категорій</option>';
+      }
+    }
 
-    // Автооновлення
+    function showPopup(id) {
+      document.getElementById(id).classList.remove('hidden');
+      if (id === 'addPopup') loadCategories();
+    }
+
+    function hidePopup(id) {
+      document.getElementById(id).classList.add('hidden');
+    }
+
+    window.showAdd = () => showPopup('addPopup');
+    window.showSummary = async () => {
+      document.getElementById('output').innerText = 'Завантаження...';
+      const res = await api('summary');
+      document.getElementById('output').innerText = res.summary || res.error || 'Пусто';
+    };
+    window.showBalance = async () => {
+      document.getElementById('output').innerText = 'Завантаження...';
+      const res = await api('balance');
+      document.getElementById('output').innerText = res.balance || 'Помилка';
+    };
+    window.undoLast = async () => {
+      const res = await api('undo');
+      tg.showAlert(res.message || 'Готово');
+      showSummary();
+    };
+    window.showLast = async () => {
+      document.getElementById('output').innerText = 'Завантаження...';
+      const res = await api('last5');
+      document.getElementById('output').innerText = res.last || 'Пусто';
+    };
+    window.showSettings = () => {
+      tg.showAlert('Налаштування в чаті:\n\n/setcat Еда 25000\n/setpers Гліб 50000');
+    };
+
+    async function saveExpense() {
+      const cat = document.getElementById('categorySelect').value;
+      const amount = document.getElementById('amountInput').value;
+      const note = document.getElementById('noteInput').value || '.';
+      
+      if (!cat || !amount || amount <= 0) {
+        tg.showAlert('Заповніть суму та категорію');
+        return;
+      }
+
+      const res = await api('addExpense', { cat, amount, note });
+      tg.showAlert(res.message || res.error || 'Додано');
+      hidePopup('addPopup');
+      showSummary();
+    }
+
+    // === АВТООНОВЛЕННЯ ===
     if (isAuthorized) showSummary();
   </script>
 </body>
