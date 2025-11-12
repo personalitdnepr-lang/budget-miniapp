@@ -122,11 +122,20 @@ def summary():
         for c, limit in CATS.items() if limit > 0
     )
     total_spent = sum(spent.values())
-    g_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Гліб")
-    d_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Дарʼя")
-    g_balance = PERSONAL.get("Гліб", 0) - g_spent
-    d_balance = PERSONAL.get("Дарʼя", 0) - d_spent
-    summary_text = f"{text}\n\nРазом витрачено: {total_spent} грн\nГліб: {g_balance}/{PERSONAL.get('Гліб', 0)}\nДарʼя: {d_balance}/{PERSONAL.get('Дарʼя', 0)}"
+    
+    # Баланс по ID → ім'я → ліміт
+    g_id = 350174070
+    d_id = 387290608
+    g_name = USERS.get(g_id, "Гліб")
+    d_name = USERS.get(d_id, "Дарʼя")
+    g_spent = sum(safe_int(r[3]) for r in rows if safe_int(r[0].split()[0]) == g_id)
+    d_spent = sum(safe_int(r[3]) for r in rows if safe_int(r[0].split()[0]) == d_id)
+    g_limit = PERSONAL.get(g_name, 0)
+    d_limit = PERSONAL.get(d_name, 0)
+    g_balance = g_limit - g_spent
+    d_balance = d_limit - d_spent
+    
+    summary_text = f"{text}\n\nРазом витрачено: {total_spent} грн\n{g_name}: {g_balance}/{g_limit}\n{d_name}: {d_balance}/{d_limit}"
     return jsonify({'summary': summary_text})
 
 @app.route('/contributions', methods=['POST'])
@@ -152,11 +161,11 @@ def contributions():
     
     mk = datetime.now().strftime("%Y%m")
     rows = [r for r in trans_sheet.get_all_values()[1:] if len(r)>6 and r[6] == mk]
-    g_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Гліб")
-    d_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Дарʼя")
+    g_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Hlib")
+    d_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Daria")
     
-    g_limit = PERSONAL.get("Гліб", 0)
-    d_limit = PERSONAL.get("Дарʼя", 0)
+    g_limit = PERSONAL.get("Hlib", 0)
+    d_limit = PERSONAL.get("Daria", 0)
     g_balance = g_limit - g_spent
     d_balance = d_limit - d_spent
     
@@ -181,10 +190,10 @@ def balance():
         return jsonify({'error': 'Доступ заборонено'}), 403
     mk = datetime.now().strftime("%Y%m")
     rows = [r for r in trans_sheet.get_all_values()[1:] if len(r)>6 and r[6] == mk]
-    g_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Гліб")
-    d_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Дарʼя")
-    g_limit = PERSONAL.get("Гліб", 0)
-    d_limit = PERSONAL.get("Дарʼя", 0)
+    g_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Hlib")
+    d_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Daria")
+    g_limit = PERSONAL.get("Hlib", 0)
+    d_limit = PERSONAL.get("Daria", 0)
     g_balance = g_limit - g_spent
     d_balance = d_limit - d_spent
     return jsonify({'balance': f"Гліб: {g_balance}/{g_limit} (залишок)\nДарʼя: {d_balance}/{d_limit} (залишок)"})
