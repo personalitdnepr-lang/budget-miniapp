@@ -50,6 +50,9 @@
     .btn:hover { transform: translateY(-1px); }
     .hidden { display: none; }
     .user-info { text-align: center; margin-bottom: 16px; font-size: 14px; color: var(--hint); }
+    .settings-item { margin: 12px 0; display: flex; justify-content: space-between; align-items: center; }
+    .settings-item input { width: 80px; padding: 8px; border-radius: 8px; border: 1px solid var(--border); }
+    .settings-item button { padding: 8px 12px; font-size: 12px; }
   </style>
 </head>
 <body>
@@ -63,7 +66,7 @@
     <button onclick="showBalance()">Баланс</button>
     <button onclick="undoLast()">Скасувати</button>
     <button onclick="showLast()">Останні</button>
-    <button onclick="showContributions()">Внесок</button> <!-- НОВА КНОПКА -->
+    <button onclick="showContributions()">Внесок</button>
     <button onclick="showSettings()">Налаштування</button>
   </div>
   <div id="output" class="output">Завантаження...</div>
@@ -80,6 +83,18 @@
       <div class="btn-group">
         <button class="btn btn-secondary" onclick="hidePopup('addPopup')">Скасувати</button>
         <button class="btn btn-primary" onclick="saveExpense()">Додати</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Новий popup для налаштувань -->
+  <div id="settingsPopup" class="popup hidden">
+    <div class="popup-content">
+      <h3>Налаштування</h3>
+      <div id="settingsContent">Завантаження...</div>
+      <div class="btn-group">
+        <button class="btn btn-secondary" onclick="hidePopup('settingsPopup')">Закрити</button>
+        <button class="btn btn-primary" onclick="saveSettings()">Оновити</button>
       </div>
     </div>
   </div>
@@ -154,16 +169,61 @@
       const res = await api('last5');
       document.getElementById('output').innerText = res.last || 'Пусто';
     };
-    window.showSettings = () => {
-      tg.showAlert('Налаштування в чаті:\n\n/setcat Еда 25000\n/setpers Гліб 50000');
-    };
-
-    // НОВА ФУНКЦІЯ — Внесок
     window.showContributions = async () => {
       document.getElementById('output').innerText = 'Завантаження...';
       const res = await api('contributions');
       document.getElementById('output').innerText = res.contributions || res.error || 'Пусто';
     };
+
+    // Налаштування
+    let settingsData = {};
+    window.showSettings = async () => {
+      document.getElementById('settingsPopup').classList.remove('hidden');
+      const res = await api('getSettings');
+      if (res.error) {
+        document.getElementById('settingsContent').innerText = res.error;
+        return;
+      }
+      settingsData = res;
+     
+      let html = "<h4>Категорії:</h4>";
+      res.categories.forEach(cat => {
+        html += `<div class="settings-item">
+          <span>${cat.name}:</span>
+          <input type="number" data-type="category" data-name="${cat.name}" value="${cat.limit}">
+          <button onclick="updateSingle('category', '${cat.name}', this.previousElementSibling.value)">ОК</button>
+        </div>`;
+      });
+     
+      html += "<h4>Ліміти:</h4>";
+      html += `<div class="settings-item">
+        <span>Гліб:</span>
+        <input type="number" data-type="person" data-name="Гліб" value="${res.limits['Гліб']}">
+        <button onclick="updateSingle('person', 'Гліб', this.previousElementSibling.value)">ОК</button>
+      </div>`;
+      html += `<div class="settings-item">
+        <span>Дарʼя:</span>
+        <input type="number" data-type="person" data-name="Дарʼя" value="${res.limits['Дарʼя']}">
+        <button onclick="updateSingle('person', 'Дарʼя', this.previousElementSibling.value)">ОК</button>
+      </div>`;
+     
+      document.getElementById('settingsContent').innerHTML = html;
+    };
+    async function updateSingle(type, name, input) {
+      const value = parseInt(input.value);
+      if (isNaN(value) || value < 0) return tg.showAlert('Невірне значення');
+     
+      const res = await api('updateLimit', { type, name, value });
+      if (res.success) {
+        tg.showAlert('Оновлено!');
+        showSummary();
+      } else {
+        tg.showAlert(res.error || 'Помилка');
+      }
+    }
+    async function saveSettings() {
+      tg.showAlert('Використовуйте "ОК" біля кожного поля');
+    }
 
     async function saveExpense() {
       const cat = document.getElementById('categorySelect').value;
