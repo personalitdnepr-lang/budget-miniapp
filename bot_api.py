@@ -20,26 +20,28 @@ sh = client.open_by_key(SHEET_ID)
 cats_sheet = sh.worksheet("Categories")
 trans_sheet = sh.worksheet("Transactions")
 pers_sheet = sh.worksheet("Persons")
-cont_sheet = sh.worksheet("Contributions")  # Новий аркуш
+cont_sheet = sh.worksheet("Contributions")
 
 def load_data():
     CATS = {row[0]: int(row[1]) for row in cats_sheet.get_all_values()[1:] if len(row) >= 2 and row[0]}
     PERSONAL = {row[1]: int(row[2]) for row in pers_sheet.get_all_values()[1:] if len(row) > 2 and row[1]}
     USERS = {int(row[0]): row[1] for row in pers_sheet.get_all_values()[1:] if row[0].isdigit()}
+    
+    # Безпечне читання Contributions
     CONTRIBUTIONS = {}
     for row in cont_sheet.get_all_values()[1:]:
         if len(row) >= 10 and row[0]:
             name = row[0]
             CONTRIBUTIONS[name] = {
-                'total': int(row[1]),
-                'Apartment': int(row[2]),
-                'Food': int(row[3]),
-                'Cats': int(row[4]),
-                'Chemistry': int(row[5]),
-                'BeautyHealth': int(row[6]),
-                'Entertainment': int(row[7]),
-                'Taxi': int(row[8]),
-                'Other': int(row[9])
+                'total': safe_int(row[1]),
+                'Apartment': safe_int(row[2]),
+                'Food': safe_int(row[3]),
+                'Cats': safe_int(row[4]),
+                'Chemistry': safe_int(row[5]),
+                'BeautyHealth': safe_int(row[6]),
+                'Entertainment': safe_int(row[7]),
+                'Taxi': safe_int(row[8]),
+                'Other': safe_int(row[9])
             }
     return CATS, PERSONAL, USERS, CONTRIBUTIONS
 
@@ -49,7 +51,7 @@ ALLOWED_IDS = [350174070, 387290608]
 
 def safe_int(s, default=0):
     try:
-        return int(s)
+        return int(s) if s.strip() else default
     except (ValueError, TypeError):
         return default
 
@@ -126,25 +128,22 @@ def contributions():
     if user_id not in ALLOWED_IDS:
         return jsonify({'error': 'Доступ заборонено'}), 403
     
-    # Внески з Contributions
     contrib_data = {}
     for row in cont_sheet.get_all_values()[1:]:
         if len(row) >= 10 and row[0]:
             name = row[0]
-            total = int(row[1])
             contrib_data[name] = {
-                'total': total,
-                'Квартира': int(row[2]),
-                'Еда': int(row[3]),
-                'Коты': int(row[4]),
-                'Химия': int(row[5]),
-                'Красота и здоровье': int(row[6]),
-                'Развлечения': int(row[7]),
-                'Такси': int(row[8]),
-                'Другое': int(row[9])
+                'total': safe_int(row[1]),
+                'Квартира': safe_int(row[2]),
+                'Еда': safe_int(row[3]),
+                'Коты': safe_int(row[4]),
+                'Химия': safe_int(row[5]),
+                'Красота и здоровье': safe_int(row[6]),
+                'Развлечения': safe_int(row[7]),
+                'Такси': safe_int(row[8]),
+                'Другое': safe_int(row[9])
             }
     
-    # Витрати
     mk = datetime.now().strftime("%Y%m")
     rows = [r for r in trans_sheet.get_all_values()[1:] if len(r)>6 and r[6] == mk]
     g_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Гліб")
