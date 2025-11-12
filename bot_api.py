@@ -30,28 +30,14 @@ def load_data():
 
 CATS, PERSONAL, USERS = load_data()
 
-ALLOWED_IDS = [350174070, 387290608]
+ALLOWED_IDS = ['350174070', '387290608']
 
-@app.route('/', methods=['GET'])
-def index():
-    return send_from_directory('.', 'index.html')
-
-@app.route('/<path:path>', methods=['GET'])
-def static_files(path):
-    return send_from_directory('.', path)
-
-def safe_int(s, default=0):
-    try:
-        return int(s)
-    except (ValueError, TypeError):
-        return default
-
-@app.route('/getCategories', methods=['POST'])
-def get_categories():
-    user_id = request.json.get('userId', 0)
+@app.route('/<action>', methods=['POST'])
+def api_handler(action):
+    user_id = request.json.get('userId', '0')
     if user_id not in ALLOWED_IDS:
-        return jsonify({'error': 'Доступ заборонено'})
-    return jsonify({'categories': list(CATS.keys())})
+        return jsonify({'error': 'Доступ заборонено'}), 403
+    # ... решта логіки
 
 @app.route('/addExpense', methods=['POST'])
 def add_expense():
