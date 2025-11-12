@@ -35,7 +35,7 @@ def load_data():
     
     CONTRIBUTIONS = {}
     for row in cont_sheet.get_all_values()[1:]:
-        if len(row) >= 10 and row[0]:
+        if len(row) >= 11 and row[0]:  # +1 колонка Savings
             name = row[0]
             CONTRIBUTIONS[name] = {
                 'total': safe_int(row[1]),
@@ -46,7 +46,8 @@ def load_data():
                 'Красота и здоровье': safe_int(row[6]),
                 'Развлечения': safe_int(row[7]),
                 'Такси': safe_int(row[8]),
-                'Другое': safe_int(row[9])
+                'Другое': safe_int(row[9]),
+                'Сбережения': safe_int(row[10])  # Нова колонка
             }
     return CATS, PERSONAL, USERS, CONTRIBUTIONS
 
@@ -118,7 +119,7 @@ def summary():
     rows = [r for r in trans_sheet.get_all_values()[1:] if len(r)>6 and r[6] == mk]
     spent = {c: sum(safe_int(r[3]) for r in rows if r[2] == c) for c in CATS}
     text = "\n".join(
-        f"{c}: {limit - spent.get(c,0)} / {limit} ({int(spent.get(c,0)/limit*100)}%) {'80%' if 80<=spent.get(c,0)/limit*100<100 else '100%' if spent.get(c,0)/limit*100>=100 else ''}"
+        f"{c}: {spent.get(c,0)} / {limit} ({int(spent.get(c,0)/limit*100)}%) {'80%' if 80<=spent.get(c,0)/limit*100<100 else '100%' if spent.get(c,0)/limit*100>=100 else ''}"
         for c, limit in CATS.items() if limit > 0
     )
     total_spent = sum(spent.values())
@@ -144,7 +145,7 @@ def contributions():
     
     contrib_data = {}
     for row in cont_sheet.get_all_values()[1:]:
-        if len(row) >= 10 and row[0]:
+        if len(row) >= 11 and row[0]:
             name = row[0]
             contrib_data[name] = {
                 'total': safe_int(row[1]),
@@ -155,7 +156,8 @@ def contributions():
                 'Красота и здоровье': safe_int(row[6]),
                 'Развлечения': safe_int(row[7]),
                 'Такси': safe_int(row[8]),
-                'Другое': safe_int(row[9])
+                'Другое': safe_int(row[9]),
+                'Сбережения': safe_int(row[10])
             }
     
     mk = datetime.now().strftime("%Y%m")
