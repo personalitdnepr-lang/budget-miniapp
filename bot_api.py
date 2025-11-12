@@ -22,7 +22,6 @@ trans_sheet = sh.worksheet("Transactions")
 pers_sheet = sh.worksheet("Persons")
 cont_sheet = sh.worksheet("Contributions")
 
-# safe_int — ВИЩЕ load_data()!
 def safe_int(s, default=0):
     try:
         return int(s) if s.strip() else default
@@ -34,7 +33,6 @@ def load_data():
     PERSONAL = {row[1]: int(row[2]) for row in pers_sheet.get_all_values()[1:] if len(row) > 2 and row[1]}
     USERS = {int(row[0]): row[1] for row in pers_sheet.get_all_values()[1:] if row[0].isdigit()}
     
-    # Безпечне читання Contributions
     CONTRIBUTIONS = {}
     for row in cont_sheet.get_all_values()[1:]:
         if len(row) >= 10 and row[0]:
@@ -64,19 +62,30 @@ def index():
 def static_files(path):
     return send_from_directory('.', path)
 
+# УСІ маршрути — конвертуємо userId в int
+def check_user():
+    user_id = request.json.get('userId', 0)
+    try:
+        user_id = int(user_id)
+    except:
+        return None
+    if user_id not in ALLOWED_IDS:
+        return None
+    return user_id
+
 @app.route('/getCategories', methods=['POST'])
 def get_categories():
-    user_id = request.json.get('userId', 0)
-    if user_id not in ALLOWED_IDS:
+    user_id = check_user()
+    if not user_id:
         return jsonify({'error': 'Доступ заборонено'}), 403
     return jsonify({'categories': list(CATS.keys())})
 
 @app.route('/addExpense', methods=['POST'])
 def add_expense():
-    data = request.json
-    user_id = data.get('userId', 0)
-    if user_id not in ALLOWED_IDS:
+    user_id = check_user()
+    if not user_id:
         return jsonify({'error': 'Доступ заборонено'}), 403
+    data = request.json
     cat = data.get('cat')
     amount = int(data.get('amount', 0))
     note = data.get('note', '—')
@@ -105,8 +114,8 @@ def add_expense():
 
 @app.route('/summary', methods=['POST'])
 def summary():
-    user_id = request.json.get('userId', 0)
-    if user_id not in ALLOWED_IDS:
+    user_id = check_user()
+    if not user_id:
         return jsonify({'error': 'Доступ заборонено'}), 403
     mk = datetime.now().strftime("%Y%m")
     rows = [r for r in trans_sheet.get_all_values()[1:] if len(r)>6 and r[6] == mk]
@@ -125,8 +134,8 @@ def summary():
 
 @app.route('/contributions', methods=['POST'])
 def contributions():
-    user_id = request.json.get('userId', 0)
-    if user_id not in ALLOWED_IDS:
+    user_id = check_user()
+    if not user_id:
         return jsonify({'error': 'Доступ заборонено'}), 403
     
     contrib_data = {}
@@ -169,8 +178,8 @@ def contributions():
 
 @app.route('/balance', methods=['POST'])
 def balance():
-    user_id = request.json.get('userId', 0)
-    if user_id not in ALLOWED_IDS:
+    user_id = check_user()
+    if not user_id:
         return jsonify({'error': 'Доступ заборонено'}), 403
     mk = datetime.now().strftime("%Y%m")
     rows = [r for r in trans_sheet.get_all_values()[1:] if len(r)>6 and r[6] == mk]
@@ -184,8 +193,8 @@ def balance():
 
 @app.route('/undo', methods=['POST'])
 def undo():
-    user_id = request.json.get('userId', 0)
-    if user_id not in ALLOWED_IDS:
+    user_id = check_user()
+    if not user_id:
         return jsonify({'error': 'Доступ заборонено'}), 403
     person = USERS.get(user_id, '')
     if not person:
@@ -201,8 +210,8 @@ def undo():
 
 @app.route('/last5', methods=['POST'])
 def last5():
-    user_id = request.json.get('userId', 0)
-    if user_id not in ALLOWED_IDS:
+    user_id = check_user()
+    if not user_id:
         return jsonify({'error': 'Доступ заборонено'}), 403
     rows = trans_sheet.get_all_values()[1:][-5:][::-1]
     text = "\n".join(
