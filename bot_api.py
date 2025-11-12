@@ -3,6 +3,7 @@ import gspread
 import json
 import os
 from dotenv import load_dotenv
+from datetime import datetime  # ← ДОДАНО!
 
 load_dotenv()
 SHEET_ID = os.getenv("SHEET_ID")
@@ -64,7 +65,7 @@ def add_expense():
     if cat not in CATS:
         return jsonify({'error': 'Категорія не існує'})
 
-    mk = month_key()
+    mk = datetime.now().strftime("%Y%m")  # ← Тепер працює!
     row = [datetime.now().strftime("%Y-%m-%d %H:%M"), person, cat, amount, note, 0, mk]
     trans_sheet.append_row(row)
     
@@ -80,9 +81,6 @@ def add_expense():
     message = f"{amount} грн — {cat}\nЗалишок: {limit - spent} ({int(perc)}%) {warn}\n{person}: {p_spent}/{p_limit} {p_warn}"
     return jsonify({'message': message})
 
-def month_key():
-    return datetime.now().strftime("%Y%m")
-
 def safe_int(s, default=0):
     try:
         return int(s)
@@ -94,7 +92,7 @@ def summary():
     user_id = request.json.get('userId', 0)
     if user_id not in ALLOWED_IDS:
         return jsonify({'error': 'Доступ заборонено'})
-    mk = month_key()
+    mk = datetime.now().strftime("%Y%m")
     rows = [r for r in trans_sheet.get_all_values()[1:] if len(r)>6 and r[6] == mk]
     spent = {c: sum(safe_int(r[3]) for r in rows if r[2] == c) for c in CATS}
     text = "\n".join(
@@ -112,7 +110,7 @@ def balance():
     user_id = request.json.get('userId', 0)
     if user_id not in ALLOWED_IDS:
         return jsonify({'error': 'Доступ заборонено'})
-    mk = month_key()
+    mk = datetime.now().strftime("%Y%m")
     rows = [r for r in trans_sheet.get_all_values()[1:] if len(r)>6 and r[6] == mk]
     g = sum(safe_int(r[3]) for r in rows if r[1] == "Гліб")
     d = sum(safe_int(r[3]) for r in rows if r[1] == "Дарʼя")
@@ -127,7 +125,7 @@ def undo():
     if not person:
         return jsonify({'message': 'Ти не в базі'})
     rows = trans_sheet.get_all_values()
-    mk = month_key()
+    mk = datetime.now().strftime("%Y%m")
     for i in range(len(rows)-1, 0, -1):
         r = rows[i]
         if len(r) > 6 and r[1] == person and r[6] == mk:
