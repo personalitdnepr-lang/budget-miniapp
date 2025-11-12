@@ -10,7 +10,6 @@ SHEET_ID = os.getenv("SHEET_ID")
 
 app = Flask(__name__, static_folder='.')
 
-# === Google Sheets ===
 creds_json = os.getenv("CREDENTIALS_JSON")
 if not creds_json:
     raise ValueError("CREDENTIALS_JSON не встановлено!")
@@ -30,7 +29,7 @@ def load_data():
 
 CATS, PERSONAL, USERS = load_data()
 
-ALLOWED_IDS = [350174070, 387290608]
+ALLOWED_IDS = [350174070, 387290608]  # ← ЧИСЛА, НЕ РЯДКИ!
 
 def safe_int(s, default=0):
     try:
@@ -38,7 +37,6 @@ def safe_int(s, default=0):
     except (ValueError, TypeError):
         return default
 
-# === HTML + Static ===
 @app.route('/', methods=['GET'])
 def index():
     return send_from_directory('.', 'index.html')
@@ -47,7 +45,6 @@ def index():
 def static_files(path):
     return send_from_directory('.', path)
 
-# === API ===
 @app.route('/getCategories', methods=['POST'])
 def get_categories():
     user_id = request.json.get('userId', 0)
