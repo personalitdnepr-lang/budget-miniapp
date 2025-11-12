@@ -124,11 +124,9 @@ def summary():
     total_spent = sum(spent.values())
     g_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Гліб")
     d_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Дарʼя")
-    g_limit = PERSONAL.get("Гліб", 0)
-    d_limit = PERSONAL.get("Дарʼя", 0)
-    g_balance = g_limit - g_spent
-    d_balance = d_limit - d_spent
-    summary_text = f"{text}\n\nРазом витрачено: {total_spent} грн\nГліб: {g_balance}/{g_limit}\nДарʼя: {d_balance}/{d_limit}"
+    g_balance = PERSONAL.get("Гліб", 0) - g_spent
+    d_balance = PERSONAL.get("Дарʼя", 0) - d_spent
+    summary_text = f"{text}\n\nРазом витрачено: {total_spent} грн\nГліб: {g_balance}/{PERSONAL.get('Гліб', 0)}\nДарʼя: {d_balance}/{PERSONAL.get('Дарʼя', 0)}"
     return jsonify({'summary': summary_text})
 
 @app.route('/contributions', methods=['POST'])
@@ -157,12 +155,13 @@ def contributions():
     g_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Гліб")
     d_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Дарʼя")
     
-    g_contrib = contrib_data.get("Hlib", {})
-    d_contrib = contrib_data.get("Daria", {})
     g_limit = PERSONAL.get("Гліб", 0)
     d_limit = PERSONAL.get("Дарʼя", 0)
     g_balance = g_limit - g_spent
     d_balance = d_limit - d_spent
+    
+    g_contrib = contrib_data.get("Hlib", {})
+    d_contrib = contrib_data.get("Daria", {})
     
     text = f"Внесок у бюджет:\nГліб: {g_contrib.get('total', 0)} грн (баланс {g_balance} грн)\n"
     for cat, amount in g_contrib.items():
