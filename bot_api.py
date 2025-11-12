@@ -10,10 +10,10 @@ SHEET_ID = os.getenv("SHEET_ID")
 
 app = Flask(__name__, static_folder='.')
 
+# === Google Sheets ===
 creds_json = os.getenv("CREDENTIALS_JSON")
 if not creds_json:
     raise ValueError("CREDENTIALS_JSON не встановлено!")
-
 creds_dict = json.loads(creds_json)
 client = gspread.service_account_from_dict(creds_dict)
 
@@ -32,6 +32,13 @@ CATS, PERSONAL, USERS = load_data()
 
 ALLOWED_IDS = [350174070, 387290608]
 
+def safe_int(s, default=0):
+    try:
+        return int(s)
+    except (ValueError, TypeError):
+        return default
+
+# === HTML + Static ===
 @app.route('/', methods=['GET'])
 def index():
     return send_from_directory('.', 'index.html')
@@ -40,17 +47,12 @@ def index():
 def static_files(path):
     return send_from_directory('.', path)
 
-def safe_int(s, default=0):
-    try:
-        return int(s)
-    except (ValueError, TypeError):
-        return default
-
+# === API ===
 @app.route('/getCategories', methods=['POST'])
 def get_categories():
     user_id = request.json.get('userId', 0)
     if user_id not in ALLOWED_IDS:
-        return jsonify({'error': 'Доступ заборонено'})
+        return jsonify({'error': 'Доступ заборонено'}), 403
     return jsonify({'categories': list(CATS.keys())})
 
 @app.route('/addExpense', methods=['POST'])
@@ -58,9 +60,9 @@ def add_expense():
     data = request.json
     user_id = data.get('userId', 0)
     if user_id not in ALLOWED_IDS:
-        return jsonify({'error': 'Доступ заборонено'})
+        return jsonify({'error': 'Доступ заборонено'}), 403
     cat = data.get('cat')
-    amount = data.get('amount')
+    amount = int(data.get('amount', 0))
     note = data.get('note', '—')
     person = USERS.get(user_id, 'Невідомий')
     
@@ -89,7 +91,7 @@ def add_expense():
 def summary():
     user_id = request.json.get('userId', 0)
     if user_id not in ALLOWED_IDS:
-        return jsonify({'error': 'Доступ заборонено'})
+        return jsonify({'error': 'Доступ заборонено'}), 403
     mk = datetime.now().strftime("%Y%m")
     rows = [r for r in trans_sheet.get_all_values()[1:] if len(r)>6 and r[6] == mk]
     spent = {c: sum(safe_int(r[3]) for r in rows if r[2] == c) for c in CATS}
@@ -109,7 +111,7 @@ def summary():
 def balance():
     user_id = request.json.get('userId', 0)
     if user_id not in ALLOWED_IDS:
-        return jsonify({'error': 'Доступ заборонено'})
+        return jsonify({'error': 'Доступ заборонено'}), 403
     mk = datetime.now().strftime("%Y%m")
     rows = [r for r in trans_sheet.get_all_values()[1:] if len(r)>6 and r[6] == mk]
     g_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Гліб")
@@ -122,7 +124,7 @@ def balance():
 def undo():
     user_id = request.json.get('userId', 0)
     if user_id not in ALLOWED_IDS:
-        return jsonify({'error': 'Доступ заборонено'})
+        return jsonify({'error': 'Доступ заборонено'}), 403
     person = USERS.get(user_id, '')
     if not person:
         return jsonify({'message': 'Ти не в базі'})
@@ -139,7 +141,7 @@ def undo():
 def last5():
     user_id = request.json.get('userId', 0)
     if user_id not in ALLOWED_IDS:
-        return jsonify({'error': 'Доступ заборонено'})
+        return jsonify({'error': 'Доступ заборонено'}), 403
     rows = trans_sheet.get_all_values()[1:][-5:][::-1]
     text = "\n".join(
         f"{r[0].split()[0]} – {r[2]} – {r[3]} – {r[1]} – \"{r[4]}\"" 
