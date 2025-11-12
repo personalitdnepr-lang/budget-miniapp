@@ -3,16 +3,16 @@ import gspread
 import json
 import os
 from dotenv import load_dotenv
-from datetime import datetime
 
 load_dotenv()
 SHEET_ID = os.getenv("SHEET_ID")
 
 app = Flask(__name__, static_folder='.')
 
+# === Google Sheets: з змінної CREDENTIALS_JSON ===
 creds_json = os.getenv("CREDENTIALS_JSON")
 if not creds_json:
-    raise ValueError("CREDENTIALS_JSON не встановлено!")
+    raise ValueError("CREDENTIALS_JSON не встановлено! Додай у змінні середовища Railway.")
 
 creds_dict = json.loads(creds_json)
 client = gspread.service_account_from_dict(creds_dict)
@@ -22,6 +22,7 @@ cats_sheet = sh.worksheet("Categories")
 trans_sheet = sh.worksheet("Transactions")
 pers_sheet = sh.worksheet("Persons")
 
+# === Завантаження даних ===
 def load_data():
     CATS = {row[0]: int(row[1]) for row in cats_sheet.get_all_values()[1:] if len(row) >= 2 and row[0]}
     PERSONAL = {row[1]: int(row[2]) for row in pers_sheet.get_all_values()[1:] if len(row) > 2 and row[1]}
@@ -30,14 +31,24 @@ def load_data():
 
 CATS, PERSONAL, USERS = load_data()
 
-ALLOWED_IDS = ['350174070', '387290608']
+ALLOWED_IDS = [350174070, 387290608]
 
-@app.route('/<action>', methods=['POST'])
-def api_handler(action):
-    user_id = request.json.get('userId', '0')
+# === HTML ===
+@app.route('/', methods=['GET'])
+def index():
+    return send_from_directory('.', 'index.html')
+
+@app.route('/<path:path>', methods=['GET'])
+def static_files(path):
+    return send_from_directory('.', path)
+
+# === API ===
+@app.route('/getCategories', methods=['POST'])
+def get_categories():
+    user_id = request.json.get('userId', 0)
     if user_id not in ALLOWED_IDS:
-        return jsonify({'error': 'Доступ заборонено'}), 403
-    # ... решта логіки
+        return jsonify({'error': 'Доступ заборонено'})
+    return jsonify({'categories': list(CATS.keys())})
 
 @app.route('/addExpense', methods=['POST'])
 def add_expense():
@@ -53,42 +64,47 @@ def add_expense():
     if cat not in CATS:
         return jsonify({'error': 'Категорія не існує'})
 
-    mk = datetime.now().strftime("%Y%m")
+    mk = month_key()
     row = [datetime.now().strftime("%Y-%m-%d %H:%M"), person, cat, amount, note, 0, mk]
     trans_sheet.append_row(row)
     
     spent = sum(safe_int(r[3]) for r in trans_sheet.get_all_values()[1:] if len(r)>6 and r[6] == mk and r[2] == cat)
     limit = CATS[cat]
-    balance = limit - spent
     perc = spent / limit * 100 if limit else 0
     warn = "80%" if 80 <= perc < 100 else "100%" if perc >= 100 else ""
     
     p_spent = sum(safe_int(r[3]) for r in trans_sheet.get_all_values()[1:] if len(r)>6 and r[6] == mk and r[1] == person)
     p_limit = PERSONAL.get(person, 0)
-    p_balance = p_limit - p_spent
     p_warn = "наближаєтесь" if p_limit and 80 <= p_spent/p_limit*100 < 100 else "перевищення!" if p_limit and p_spent/p_limit*100 >= 100 else ""
     
-    message = f"{amount} грн — {cat}\nБаланс: {balance} ({int(perc)}%) {warn}\n{person}: {p_balance}/{p_limit} {p_warn}"
+    message = f"{amount} грн — {cat}\nЗалишок: {limit - spent} ({int(perc)}%) {warn}\n{person}: {p_spent}/{p_limit} {p_warn}"
     return jsonify({'message': message})
+
+def month_key():
+    return datetime.now().strftime("%Y%m")
+
+def safe_int(s, default=0):
+    try:
+        return int(s)
+    except (ValueError, TypeError):
+        return default
 
 @app.route('/summary', methods=['POST'])
 def summary():
     user_id = request.json.get('userId', 0)
     if user_id not in ALLOWED_IDS:
         return jsonify({'error': 'Доступ заборонено'})
-    mk = datetime.now().strftime("%Y%m")
+    mk = month_key()
     rows = [r for r in trans_sheet.get_all_values()[1:] if len(r)>6 and r[6] == mk]
     spent = {c: sum(safe_int(r[3]) for r in rows if r[2] == c) for c in CATS}
     text = "\n".join(
-        f"{c}: {limit - spent.get(c,0)} / {limit} ({int(spent.get(c,0)/limit*100)}%) {'80%' if 80<=spent.get(c,0)/limit*100<100 else '100%' if spent.get(c,0)/limit*100>=100 else ''}"
-        for c, limit in CATS.items() if limit > 0
+        f"{c}: {spent.get(c,0)} / {lim} ({int(spent.get(c,0)/lim*100)}%) {'80%' if 80<=spent.get(c,0)/lim*100<100 else '100%' if spent.get(c,0)/lim*100>=100 else ''}"
+        for c, lim in CATS.items() if lim > 0
     )
-    total_spent = sum(spent.values())
-    g_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Гліб")
-    d_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Дарʼя")
-    g_balance = 45000 - g_spent
-    d_balance = 33000 - d_spent
-    summary_text = f"{text}\n\nРазом витрачено: {total_spent} грн\nГліб: {g_balance}/45000\nДарʼя: {d_balance}/33000"
+    total = sum(spent.values())
+    g = sum(safe_int(r[3]) for r in rows if r[1] == "Гліб")
+    d = sum(safe_int(r[3]) for r in rows if r[1] == "Дарʼя")
+    summary_text = f"{text}\n\nРазом: {total} грн\nГліб: {g}/45000\nДарʼя: {d}/33000"
     return jsonify({'summary': summary_text})
 
 @app.route('/balance', methods=['POST'])
@@ -96,13 +112,11 @@ def balance():
     user_id = request.json.get('userId', 0)
     if user_id not in ALLOWED_IDS:
         return jsonify({'error': 'Доступ заборонено'})
-    mk = datetime.now().strftime("%Y%m")
+    mk = month_key()
     rows = [r for r in trans_sheet.get_all_values()[1:] if len(r)>6 and r[6] == mk]
-    g_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Гліб")
-    d_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Дарʼя")
-    g_balance = 45000 - g_spent
-    d_balance = 33000 - d_spent
-    return jsonify({'balance': f"Гліб: {g_balance}/45000 (залишок)\nДарʼя: {d_balance}/33000 (залишок)"})
+    g = sum(safe_int(r[3]) for r in rows if r[1] == "Гліб")
+    d = sum(safe_int(r[3]) for r in rows if r[1] == "Дарʼя")
+    return jsonify({'balance': f"Гліб: {g}/45000 → {45000-g}\nДарʼя: {d}/33000 → {33000-d}"})
 
 @app.route('/undo', methods=['POST'])
 def undo():
@@ -113,7 +127,7 @@ def undo():
     if not person:
         return jsonify({'message': 'Ти не в базі'})
     rows = trans_sheet.get_all_values()
-    mk = datetime.now().strftime("%Y%m")
+    mk = month_key()
     for i in range(len(rows)-1, 0, -1):
         r = rows[i]
         if len(r) > 6 and r[1] == person and r[6] == mk:
