@@ -46,12 +46,11 @@
   </style>
 </head>
 <body>
-  <!-- Авторизація (разова) -->
+  <!-- Авторизація -->
   <div id="authScreen" class="auth-screen">
     <h2>🔐 Авторизація</h2>
     <p>Твій ID: <span id="userId"></span></p>
     <p id="authMessage">Перевіряю доступ...</p>
-    <button id="authButton" onclick="checkAuth()" class="btn btn-primary hidden">Перевірити доступ</button>
   </div>
 
   <!-- Основний інтерфейс -->
@@ -108,6 +107,7 @@
         userName = ALLOWED_IDS[data.userId];
         document.getElementById('userName').textContent = userName;
         document.getElementById('mainApp').classList.remove('hidden');
+        document.getElementById('authScreen').classList.add('hidden');
         showSummary();
       }
     }
@@ -126,7 +126,6 @@
         showSummary();
       } else {
         document.getElementById('authMessage').textContent = 'Доступ заборонено';
-        document.getElementById('authButton').classList.add('hidden');
       }
     }
 
@@ -135,11 +134,8 @@
       location.reload();
     }
 
-    // Показати авторизацію, якщо не авторизовано
-    if (!isAuthorized) {
-      document.getElementById('authButton').classList.remove('hidden');
-      document.getElementById('authMessage').textContent = 'Натисни кнопку для входу';
-    }
+    // === АВТОМАТИЧНА ПЕРЕВІРКА ===
+    setTimeout(checkAuth, 500);  // ← АВТОМАТИЧНО через 0.5 сек
 
     // === API ===
     async function api(action, data = {}) {
@@ -157,7 +153,7 @@
       }
     }
 
-    // (решта функцій — showAdd, showSummary, saveExpense, etc. — як раніше)
+    // (інші функції — showAdd, showSummary, etc.)
 
     // Автооновлення
     if (isAuthorized) showSummary();
