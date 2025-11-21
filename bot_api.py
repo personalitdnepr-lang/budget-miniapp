@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_file
 import gspread
 import json
 import os
@@ -8,7 +8,7 @@ from datetime import datetime
 load_dotenv()
 SHEET_ID = os.getenv("SHEET_ID")
 
-app = Flask(__name__, static_folder='.')
+app = Flask(__name__)
 
 creds_json = os.getenv("CREDENTIALS_JSON")
 if not creds_json:
@@ -17,6 +17,10 @@ creds_dict = json.loads(creds_json)
 client = gspread.service_account_from_dict(creds_dict)
 
 sh = client.open_by_key(SHEET_ID)
+cats_sheet = sh.worksheet("Categories")
+trans_sheet = sh.worksheet("Transactions")
+pers_sheet = sh.worksheet("Persons")
+cont_sheet = sh.worksheet("Contributions")
 
 def safe_int(s, default=0):
     try:
@@ -25,11 +29,6 @@ def safe_int(s, default=0):
         return default
 
 def load_data():
-    cats_sheet = sh.worksheet("Categories")
-    trans_sheet = sh.worksheet("Transactions")
-    pers_sheet = sh.worksheet("Persons")
-    cont_sheet = sh.worksheet("Contributions")
-
     CATS = {row[0]: int(row[1]) for row in cats_sheet.get_all_values()[1:] if len(row) >= 2 and row[0]}
     PERSONAL = {row[1]: int(row[2]) for row in pers_sheet.get_all_values()[1:] if len(row) > 2 and row[1]}
     USERS = {int(row[0]): row[1] for row in pers_sheet.get_all_values()[1:] if row[0].isdigit()}
@@ -52,17 +51,18 @@ def load_data():
             }
     return CATS, PERSONAL, USERS, CONTRIBUTIONS
 
-# ... (решта коду — addExpense, summary, contributions, etc.) ...
+@app.route('/', methods=['GET'])
+def index():
+    return send_file('index.html')
 
-# У кожному маршруті — оновлюємо дані
-@app.route('/summary', methods=['POST'])
-def summary():
-    CATS, PERSONAL, USERS, CONTRIBUTIONS = load_data()  # ← ДИНАМІЧНО ОНОВЛЮЄМО
+@app.route('/getCategories', methods=['POST'])
+def get_categories():
     if not check_user():
         return jsonify({'error': 'Доступ заборонено'}), 403
-    # ... (решта функції) ...
+    CATS, PERSONAL, USERS, CONTRIBUTIONS = load_data()  # Оновлюємо дані
+    return jsonify({'categories': list(CATS.keys())})
 
-# Аналогічно для інших маршрутів: addExpense, contributions, etc. — додай CATS, PERSONAL, USERS, CONTRIBUTIONS = load_data() на початку
+# ... (додай аналогічно CATS, PERSONAL, USERS, CONTRIBUTIONS = load_data() до кожного @app.route для динамічного оновлення)
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
