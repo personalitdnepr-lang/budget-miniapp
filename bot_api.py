@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_from_directory
 import gspread
 import json
 import os
@@ -8,7 +8,7 @@ from datetime import datetime
 load_dotenv()
 SHEET_ID = os.getenv("SHEET_ID")
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='.')
 
 creds_json = os.getenv("CREDENTIALS_JSON")
 if not creds_json:
@@ -34,32 +34,42 @@ def load_data():
     USERS = {int(row[0]): row[1] for row in pers_sheet.get_all_values()[1:] if row[0].isdigit()}
     
     CONTRIBUTIONS = {}
+    headers = cont_sheet.get_all_values()[0]  # Заголовки (User, TotalLimit, Apartment, Food, ...)
     for row in cont_sheet.get_all_values()[1:]:
-        if len(row) >= 11 and row[0]:
+        if len(row) >= len(headers) and row[0]:
             name = row[0]
-            CONTRIBUTIONS[name] = {
-                'total': safe_int(row[1]),
-                'Квартира': safe_int(row[2]),
-                'Еда': safe_int(row[3]),
-                'Коты': safe_int(row[4]),
-                'Химия': safe_int(row[5]),
-                'Красота и здоровье': safe_int(row[6]),
-                'Развлечения': safe_int(row[7]),
-                'Такси': safe_int(row[8]),
-                'Другое': safe_int(row[9]),
-                'Сбережения': safe_int(row[10])
-            }
+            contrib = {}
+            for i in range(1, len(headers)):
+                contrib[headers[i]] = safe_int(row[i])
+            CONTRIBUTIONS[name] = contrib
     return CATS, PERSONAL, USERS, CONTRIBUTIONS
+
+CATS, PERSONAL, USERS, CONTRIBUTIONS = load_data()
+
+ALLOWED_IDS = [350174070, 387290608]
 
 @app.route('/', methods=['GET'])
 def index():
-    return send_file('index.html')
+    return send_from_directory('.', 'index.html')
+
+@app.route('/<path:path>', methods=['GET'])
+def static_files(path):
+    return send_from_directory('.', path)
+
+def check_user():
+    user_id = request.json.get('userId', 0)
+    try:
+        user_id = int(user_id)
+    except:
+        return None
+    if user_id not in ALLOWED_IDS:
+        return None
+    return user_id
 
 @app.route('/getCategories', methods=['POST'])
 def get_categories():
     if not check_user():
         return jsonify({'error': 'Доступ заборонено'}), 403
-    CATS, PERSONAL, USERS, CONTRIBUTIONS = load_data()  # Оновлюємо дані
     return jsonify({'categories': list(CATS.keys())})
 
 @app.route('/addExpense', methods=['POST'])
@@ -67,7 +77,6 @@ def add_expense():
     user_id = check_user()
     if not user_id:
         return jsonify({'error': 'Доступ заборонено'}), 403
-    CATS, PERSONAL, USERS, CONTRIBUTIONS = load_data()  # Оновлюємо дані
     data = request.json
     cat = data.get('cat')
     amount = int(data.get('amount', 0))
@@ -99,7 +108,6 @@ def add_expense():
 def summary():
     if not check_user():
         return jsonify({'error': 'Доступ заборонено'}), 403
-    CATS, PERSONAL, USERS, CONTRIBUTIONS = load_data()  # Оновлюємо дані
     mk = datetime.now().strftime("%Y%m")
     rows = [r for r in trans_sheet.get_all_values()[1:] if len(r)>6 and r[6] == mk]
     spent = {c: sum(safe_int(r[3]) for r in rows if r[2] == c) for c in CATS}
@@ -127,26 +135,35 @@ def summary():
 def contributions():
     if not check_user():
         return jsonify({'error': 'Доступ заборонено'}), 403
-    CATS, PERSONAL, USERS, CONTRIBUTIONS = load_data()  # Оновлюємо дані
+    
+    contrib_data = {}
+    headers = cont_sheet.get_all_values()[0]
+    for row in cont_sheet.get_all_values()[1:]:
+        if len(row) >= len(headers) and row[0]:
+            name = row[0]
+            contrib = {}
+            for i in range(1, len(headers)):
+                contrib[headers[i]] = safe_int(row[i])
+            contrib_data[name] = contrib
     
     mk = datetime.now().strftime("%Y%m")
     rows = [r for r in trans_sheet.get_all_values()[1:] if len(r)>6 and r[6] == mk]
     g_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Hlib")
     d_spent = sum(safe_int(r[3]) for r in rows if r[1] == "Daria")
     
-    g_contrib = CONTRIBUTIONS.get("Hlib", {})
-    d_contrib = CONTRIBUTIONS.get("Daria", {})
+    g_contrib = contrib_data.get("Hlib", {})
+    d_contrib = contrib_data.get("Daria", {})
     g_balance = PERSONAL.get("Hlib", 0) - g_spent
     d_balance = PERSONAL.get("Daria", 0) - d_spent
     
-    text = f"Внесок у бюджет:\nГліб: {g_contrib.get('total', 0)} грн (баланс {g_balance} грн)\n"
+    text = f"Внесок у бюджет:\nГліб: {g_contrib.get('TotalLimit', 0)} грн (баланс {g_balance} грн)\n"
     for cat, amount in g_contrib.items():
-        if cat != 'total' and amount > 0:
+        if cat != 'TotalLimit' and amount > 0:
             text += f" - {cat}: {amount} грн\n"
     
-    text += f"Дарʼя: {d_contrib.get('total', 0)} грн (баланс {d_balance} грн)\n"
+    text += f"Дарʼя: {d_contrib.get('TotalLimit', 0)} грн (баланс {d_balance} грн)\n"
     for cat, amount in d_contrib.items():
-        if cat != 'total' and amount > 0:
+        if cat != 'TotalLimit' and amount > 0:
             text += f" - {cat}: {amount} грн\n"
     
     return jsonify({'contributions': text.strip()})
@@ -198,54 +215,6 @@ def last5():
         for r in rows if len(r) > 4
     ) or "Пусто"
     return jsonify({'last': text})
-
-@app.route('/getSettings', methods=['POST'])
-def get_settings():
-    if not check_user():
-        return jsonify({'error': 'Доступ заборонено'}), 403
-    
-    cats = [{"name": c, "limit": l} for c, l in CATS.items()]
-    
-    g_name = USERS.get(350174070, "Hlib")
-    d_name = USERS.get(387290608, "Daria")
-    limits = {
-        "Гліб": PERSONAL.get(g_name, 0),
-        "Дарʼя": PERSONAL.get(d_name, 0)
-    }
-    
-    return jsonify({
-        'categories': cats,
-        'limits': limits
-    })
-
-@app.route('/updateLimit', methods=['POST'])
-def update_limit():
-    user_id = check_user()
-    if not user_id:
-        return jsonify({'error': 'Доступ заборонено'}), 403
-    
-    data = request.json
-    type_ = data.get('type')  # 'category' or 'person'
-    name = data.get('name')
-    value = safe_int(data.get('value', 0))
-    
-    if type_ == 'category':
-        if name not in CATS:
-            return jsonify({'error': 'Категорія не існує'})
-        row = cats_sheet.find(name).row
-        cats_sheet.update_cell(row, 2, value)
-        CATS[name] = value
-    elif type_ == 'person':
-        person_name = USERS.get(user_id)
-        if name not in ["Гліб", "Дарʼя"]:
-            return jsonify({'error': 'Невірне імʼя'})
-        row = pers_sheet.find(name).row
-        pers_sheet.update_cell(row, 3, value)
-        PERSONAL[name] = value
-    else:
-        return jsonify({'error': 'Невірний тип'})
-    
-    return jsonify({'success': True})
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
